@@ -15,7 +15,8 @@ public class OnAttachedInterceptor<TDbContext>(TDbContext dbContext) : IEfOnSavi
         )
         {
             entry.State = EntityState.Added;
-            entry.Entity.DomainStatus.IsAdded = false;
+
+            entry.Entity.DomainStatus.GotAdded();
         }
 
         return ValueTask.CompletedTask;

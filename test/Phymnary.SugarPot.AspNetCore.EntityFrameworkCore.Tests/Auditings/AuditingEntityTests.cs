@@ -76,8 +76,6 @@ public class AuditingEntityTests
         public Guid? ModifiedById { get; set; }
 
         public DateTimeOffset ModifiedAt { get; set; }
-
-        public bool IsDeleted { get; set; }
     }
 
     private static ServiceProvider BuildServices(string dbName, Guid? userId, DateTimeOffset now)
@@ -187,12 +185,5 @@ public class AuditingEntityTests
             Assert.Equal(userId, audit.ModifiedById);
             Assert.Equal(now, audit.ModifiedAt);
         }
-    }
-
-    [Fact]
-    public void test()
-    {
-        var services = new ServiceCollection();
-        var x = services.BuildServiceProvider().GetService<IEnumerable<IInterceptor>>();
     }
 }

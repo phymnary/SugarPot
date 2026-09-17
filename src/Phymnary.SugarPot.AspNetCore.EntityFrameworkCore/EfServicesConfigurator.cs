@@ -44,6 +44,7 @@ public class EfServicesConfigurator<TDbContext>
     )
     {
         CheckIfAuditingIsAlreadyConfigured();
+
         _services.AddScoped<IEfOnSavingEffect, AuditOnSavingInterceptor<TDbContext>>();
         var auditingServiceConfigurator = new EfAuditingServiceConfigurator<TDbContext>(
             _services,
@@ -59,6 +60,7 @@ public class EfServicesConfigurator<TDbContext>
         where TAuditingDbContext : DbContext
     {
         CheckIfAuditingIsAlreadyConfigured();
+
         _services.AddScoped<IEfOnSavingEffect, AuditOnSavingInterceptor<TAuditingDbContext>>();
         var auditingServiceConfigurator = new EfAuditingServiceConfigurator<TAuditingDbContext>(
             _services,

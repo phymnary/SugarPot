@@ -7,7 +7,6 @@ public interface IEfAuditor
 {
     void AddPropertyAuditings<TAudit>(IEnumerable<TAudit> propertyAudits)
         where TAudit : class, IPropertyChangeAudit, IEntity;
-    Task SavingChangesAsync(Func<Task> mainDbSaveChangesAsync, CancellationToken cancellationToken);
 }
 
 internal class EfAuditor<TAuditDbContext>(

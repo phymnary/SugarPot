@@ -6,7 +6,7 @@ using Phymnary.SugarPot.Module.Extensions;
 
 namespace Phymnary.SugarPot.AspNetCore.Auditings;
 
-file record PropertyWithOwner(PropertyInfo PropertyInfo, string? OwnedBy);
+file record PropertyWithOwner(PropertyInfo PropertyInfo, string OwnedBy);
 
 /// <summary>
 /// Singleton service to store the auditing structure of application. It also caches the auditing metadata for each entity type.
@@ -27,12 +27,12 @@ public class EfAuditingStructure
     private IEnumerable<string> GetAuditingPropertyNames(IEnumerable<PropertyInfo> propertyInfos)
     {
         Stack<PropertyWithOwner> stack = new(
-            propertyInfos.Select(p => new PropertyWithOwner(p, null))
+            propertyInfos.Select(p => new PropertyWithOwner(p, ""))
         );
 
         while (stack.TryPop(out var item))
         {
-            var propertyInfo = item.PropertyInfo;
+            var (propertyInfo, owned) = item;
 
             if (
                 propertyInfo.HasAttribute<DisabledAuditingAttribute>()
@@ -41,9 +41,6 @@ public class EfAuditingStructure
                 continue;
 
             var propertyType = propertyInfo.PropertyType;
-            var owned = item.OwnedBy.TryGetValuable(out var parentName)
-                ? parentName + "."
-                : string.Empty;
 
             if (propertyType.IsClass && propertyType != typeof(string))
             {
@@ -51,7 +48,7 @@ public class EfAuditingStructure
                 {
                     foreach (var child in propertyType.GetProperties())
                     {
-                        stack.Push(new PropertyWithOwner(child, owned + propertyInfo.Name));
+                        stack.Push(new PropertyWithOwner(child, owned + propertyInfo.Name + "."));
                     }
                 }
                 else

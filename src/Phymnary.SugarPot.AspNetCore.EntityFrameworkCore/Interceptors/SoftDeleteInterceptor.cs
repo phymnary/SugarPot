@@ -20,6 +20,8 @@ public class SoftDeleteInterceptor<TDbContext>(
 
             entry.Entity.DeletedAt = requestedAt.Value;
             entry.Entity.DeletedById = currentUser.Id;
+
+            entry.Entity.DomainStatus.GotSoftDeleted();
         }
 
         return ValueTask.CompletedTask;

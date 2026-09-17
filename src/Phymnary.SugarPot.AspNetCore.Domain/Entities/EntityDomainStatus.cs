@@ -9,7 +9,7 @@ public class EntityDomainStatus
     /// If true, entity's state will become added in DbContext when run EfRepository.UpdateAsync.
     /// Main usage is for adding non-aggregate root entity
     /// </summary>
-    public bool IsAdded { get; set; }
+    public bool IsAdded { get; private set; }
 
     /// <summary>
     /// If true, modify the entity soft delete properties when run EfRepository.UpdateAsync.
@@ -24,5 +24,15 @@ public class EntityDomainStatus
     public void SoftDelete()
     {
         IsSoftDeleted = true;
+    }
+
+    public void GotAdded()
+    {
+        IsAdded = false;
+    }
+
+    public void GotSoftDeleted()
+    {
+        IsSoftDeleted = false;
     }
 }

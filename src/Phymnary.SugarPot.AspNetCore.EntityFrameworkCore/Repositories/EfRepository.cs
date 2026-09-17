@@ -55,13 +55,13 @@ public abstract class EfRepository<TDbContext, TEntity>(
 
     private async Task<int> SaveChangesAsync(CancellationToken ct)
     {
+        foreach (var interceptor in addons.SavingInterceptors)
+        {
+            await interceptor.RunAsync(ct);
+        }
+
         try
         {
-            foreach (var interceptor in addons.SavingInterceptors)
-            {
-                await interceptor.RunAsync(ct);
-            }
-
             return await dbContext.SaveChangesAsync(
                 acceptAllChangesOnSuccess: !addons.DbStateManager.IsExecutionStrategyInTransaction,
                 cancellationToken: ct

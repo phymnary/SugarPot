@@ -37,8 +37,6 @@ internal class EntityPropertyChangeTracker<TAudit>(
         public Guid? ModifiedById { get; init; }
 
         public DateTimeOffset ModifiedAt { get; init; }
-
-        public bool IsDeleted { get; init; }
     }
 
     private class Context

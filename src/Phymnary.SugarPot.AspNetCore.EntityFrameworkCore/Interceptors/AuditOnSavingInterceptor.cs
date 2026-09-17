@@ -50,7 +50,7 @@ internal class AuditOnSavingInterceptor<TDbContext>(
             );
     }
 
-    public async Task AuditChangesAsync(EntityEntry<IAuditable> entry, CancellationToken ct)
+    public async ValueTask AuditChangesAsync(EntityEntry<IAuditable> entry, CancellationToken ct)
     {
         foreach (var tracker in changeTrackers)
         {

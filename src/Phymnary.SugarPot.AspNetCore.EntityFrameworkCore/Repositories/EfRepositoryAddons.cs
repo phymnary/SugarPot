@@ -11,7 +11,7 @@ public class EfRepositoryAddons(
 {
     public EfDbStateManager DbStateManager => dbStateManager;
 
-    public IEnumerable<IEfOnSavingEffect> SavingInterceptors => savingInterceptors;
+    public IEfOnSavingEffect[] SavingInterceptors => [.. savingInterceptors];
 
     public IAbortedToken AbortedProvider => abortedProvider;
 }

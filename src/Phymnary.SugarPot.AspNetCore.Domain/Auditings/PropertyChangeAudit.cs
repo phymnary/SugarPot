@@ -4,11 +4,11 @@ public interface IPropertyChangeAudit
 {
     string EntityName { get; }
 
+    string EntityId { get; }
+
     string PropertyName { get; }
 
     string TypeName { get; }
-
-    string EntityId { get; }
 
     string OldValue { get; }
 
@@ -17,6 +17,4 @@ public interface IPropertyChangeAudit
     Guid? ModifiedById { get; }
 
     DateTimeOffset ModifiedAt { get; }
-
-    bool IsDeleted { get; }
 }
