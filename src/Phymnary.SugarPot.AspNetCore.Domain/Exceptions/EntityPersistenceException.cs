@@ -9,7 +9,7 @@ public class EntityPersistenceException(string message, Exception? innerExceptio
     public HttpStatusCode StatusCode => HttpStatusCode.Conflict;
 
     public string? ErrorCode { get; private set; } =
-        DomainErrorCodeRegistry.DefaultEntityPersistenceException;
+        DomainErrorCodeRegistry.DefaultEntityPersistenceErrorCode;
 
     public EntityPersistenceException WithErrorCode(string code)
     {

@@ -1,11 +1,12 @@
-using System.Collections.Frozen;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
-using Phymnary.SugarPot.AspNetCore.Entities;
 using Phymnary.SugarPot.AspNetCore.Extensions;
 using Phymnary.SugarPot.Module.Extensions;
 
 namespace Phymnary.SugarPot.AspNetCore.Auditings;
+
+file record PropertyWithOwner(PropertyInfo PropertyInfo, string? OwnedBy);
 
 /// <summary>
 /// Singleton service to store the auditing structure of application. It also caches the auditing metadata for each entity type.
@@ -15,77 +16,67 @@ public class EfAuditingStructure
     private readonly Dictionary<
         Type,
         EntityPropertyAuditingMetadata
-    > _cachePropertyAuditingMetadata = [];
+    > _propertyAuditingMetadataCaches = [];
+
+    internal bool HasDifferentDbContextForAuditing { get; set; }
 
     public TrackBy TrackBy { internal get; set; }
 
-    internal bool HasDifferentDbContextForAuditChanges { get; set; }
+    public string IdPostfix { internal get; set; } = "Id";
 
-    private static IEnumerable<string> GetDisabledAuditPropertyNames(
-        IEnumerable<PropertyInfo> propertyInfos,
-        string? ownedBy = null
-    )
+    private IEnumerable<string> GetAuditingPropertyNames(IEnumerable<PropertyInfo> propertyInfos)
     {
-        var owned = ownedBy.TryGetValuable(out var parentName) ? parentName + "." : string.Empty;
+        Stack<PropertyWithOwner> stack = new(
+            propertyInfos.Select(p => new PropertyWithOwner(p, null))
+        );
 
-        foreach (var propertyInfo in propertyInfos)
+        while (stack.TryPop(out var item))
         {
-            var type = propertyInfo.PropertyType;
-            if (type.IsClass)
-            {
-                if (type.HasAttribute<OwnedAttribute>())
-                {
-                    foreach (
-                        var disabled in GetDisabledAuditPropertyNames(
-                            type.GetProperties(),
-                            owned + propertyInfo.Name
-                        )
-                    )
-                    {
-                        yield return disabled;
-                    }
-                }
-                else if (propertyInfo.HasAttribute<DisabledAuditingAttribute>())
-                {
-                    if (type.IsAssignableTo(typeof(IEntity)))
-                    {
-                        yield return owned + propertyInfo.Name + "Id";
-                    }
-                    if (type == typeof(string))
-                        yield return owned + propertyInfo.Name;
-                }
-                continue;
-            }
+            var propertyInfo = item.PropertyInfo;
 
-            if (propertyInfo.HasAttribute<DisabledAuditingAttribute>())
+            if (
+                propertyInfo.HasAttribute<DisabledAuditingAttribute>()
+                || propertyInfo.HasAttribute<NotMappedAttribute>()
+            )
+                continue;
+
+            var propertyType = propertyInfo.PropertyType;
+            var owned = item.OwnedBy.TryGetValuable(out var parentName)
+                ? parentName + "."
+                : string.Empty;
+
+            if (propertyType.IsClass && propertyType != typeof(string))
+            {
+                if (propertyType.HasAttribute<OwnedAttribute>())
+                {
+                    foreach (var child in propertyType.GetProperties())
+                    {
+                        stack.Push(new PropertyWithOwner(child, owned + propertyInfo.Name));
+                    }
+                }
+                else
+                {
+                    yield return owned + propertyInfo.Name + IdPostfix;
+                }
+            }
+            else
+            {
                 yield return owned + propertyInfo.Name;
+            }
         }
     }
 
-    private static readonly FrozenSet<string> EmptyFrozenSet = FrozenSet.ToFrozenSet<string>([]);
-
     internal EntityPropertyAuditingMetadata GetPropertyAuditingMetadata(Type entityType)
     {
-        if (_cachePropertyAuditingMetadata.TryGetValue(entityType, out var value))
+        if (_propertyAuditingMetadataCaches.TryGetValue(entityType, out var value))
             return value;
 
-        value = new EntityPropertyAuditingMetadata
-        {
-            IsAuditEnabled = !entityType.HasAttribute<DisabledAuditingAttribute>(),
-            ValidAuditProperties =
-                entityType.GetCustomAttribute<AuditingAttribute>()?.Properties.ToFrozenSet()
-                ?? EmptyFrozenSet,
-            IgnoreAuditProperties = FrozenSet.ToFrozenSet([
-                "CreatedAt",
-                "CreatedById",
-                "UpdatedAt",
-                "UpdatedById",
-                "TenantId",
-                .. GetDisabledAuditPropertyNames(entityType.GetProperties()),
-            ]),
-        };
+        value = new EntityPropertyAuditingMetadata(
+            entityType.GetCustomAttribute<AuditOnlyAttribute>()?.PropertyNames
+                ?? GetAuditingPropertyNames(entityType.GetProperties())
+        );
 
-        _cachePropertyAuditingMetadata[entityType] = value;
+        _propertyAuditingMetadataCaches[entityType] = value;
 
         return value;
     }

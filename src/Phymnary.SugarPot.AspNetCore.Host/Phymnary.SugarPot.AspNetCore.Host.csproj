@@ -8,10 +8,5 @@
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\Phymnary.SugarPot.AspNetCore.Api\Phymnary.SugarPot.AspNetCore.Api.csproj" />
-    <ProjectReference Include="..\Phymnary.SugarPot.AspNetCore.EntityFrameworkCore\Phymnary.SugarPot.AspNetCore.EntityFrameworkCore.csproj" />
-  </ItemGroup>
-
+  
 </Project>

@@ -1,21 +1,18 @@
-using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore;
 using Phymnary.SugarPot.AspNetCore.Entities;
 using Phymnary.SugarPot.AspNetCore.Security;
 
 namespace Phymnary.SugarPot.AspNetCore.Interceptors;
 
-public class SoftDeleteInterceptor(ICurrentUser currentUser, IRunAt requestedAt)
-    : SaveChangesInterceptor
+public class SoftDeleteInterceptor<TDbContext>(
+    TDbContext dbContext,
+    ICurrentUser currentUser,
+    IRunAt requestedAt
+) : IEfOnSavingEffect
+    where TDbContext : DbContext
 {
-    public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
-        DbContextEventData eventData,
-        InterceptionResult<int> result,
-        CancellationToken cancellationToken = default
-    )
+    public ValueTask RunAsync(CancellationToken cancellationToken = default)
     {
-        if (eventData.Context is not { } dbContext)
-            return base.SavingChangesAsync(eventData, result, cancellationToken);
-
         foreach (var entry in dbContext.ChangeTracker.Entries<ISoftDelete>())
         {
             if (!entry.Entity.DomainStatus.IsSoftDeleted)
@@ -25,6 +22,6 @@ public class SoftDeleteInterceptor(ICurrentUser currentUser, IRunAt requestedAt)
             entry.Entity.DeletedById = currentUser.Id;
         }
 
-        return base.SavingChangesAsync(eventData, result, cancellationToken);
+        return ValueTask.CompletedTask;
     }
 }

@@ -1,4 +1,3 @@
-using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Phymnary.SugarPot.AspNetCore.Entities;
 using Phymnary.SugarPot.AspNetCore.MultiTenancy;
@@ -13,7 +12,8 @@ public class ModelBuilderHelperQueryFilterTests
     {
         protected SoftDeletablePost() { }
 
-        public SoftDeletablePost(Guid id) : base(id) { }
+        public SoftDeletablePost(Guid id)
+            : base(id) { }
 
         public required string Title { get; set; }
 
@@ -53,7 +53,7 @@ public class ModelBuilderHelperQueryFilterTests
                 {
                     Title = "Deleted Post",
                     DeletedAt = DateTimeOffset.UtcNow,
-                    DeletedById = Guid.NewGuid()
+                    DeletedById = Guid.NewGuid(),
                 }
             );
             await db.SaveChangesAsync(ct);
@@ -88,7 +88,7 @@ public class ModelBuilderHelperQueryFilterTests
                 {
                     Title = "Deleted Post",
                     DeletedAt = DateTimeOffset.UtcNow,
-                    DeletedById = Guid.NewGuid()
+                    DeletedById = Guid.NewGuid(),
                 }
             );
             await db.SaveChangesAsync(ct);
@@ -110,7 +110,8 @@ public class ModelBuilderHelperQueryFilterTests
     {
         protected TenantAwareProduct() { }
 
-        public TenantAwareProduct(Guid id) : base(id) { }
+        public TenantAwareProduct(Guid id)
+            : base(id) { }
 
         public required string Name { get; set; }
 
@@ -213,7 +214,8 @@ public class ModelBuilderHelperQueryFilterTests
     {
         protected TenantAwareArticle() { }
 
-        public TenantAwareArticle(Guid id) : base(id) { }
+        public TenantAwareArticle(Guid id)
+            : base(id) { }
 
         public required string Title { get; set; }
 
@@ -262,7 +264,7 @@ public class ModelBuilderHelperQueryFilterTests
                     Title = "A - Deleted",
                     TenantId = tenantA,
                     DeletedAt = DateTimeOffset.UtcNow,
-                    DeletedById = Guid.NewGuid()
+                    DeletedById = Guid.NewGuid(),
                 },
                 new TenantAwareArticle(Guid.NewGuid()) { Title = "B - Active", TenantId = tenantB }
             );

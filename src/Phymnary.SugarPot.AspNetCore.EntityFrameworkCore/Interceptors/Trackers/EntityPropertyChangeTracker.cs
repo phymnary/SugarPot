@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.ChangeTracking.Internal;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Phymnary.SugarPot.AspNetCore.Auditings;
+using Phymnary.SugarPot.AspNetCore.Entities;
 using Phymnary.SugarPot.AspNetCore.Exceptions;
 using Phymnary.SugarPot.AspNetCore.Extensions;
 using Phymnary.SugarPot.AspNetCore.Security;
@@ -11,14 +12,13 @@ using Phymnary.SugarPot.Module.Extensions;
 
 namespace Phymnary.SugarPot.AspNetCore.Interceptors.Trackers;
 
-internal class EntityPropertyChangeTracker<TAuditDbContext, TAudit>(
-    TAuditDbContext auditDbContext,
+internal class EntityPropertyChangeTracker<TAudit>(
     ICurrentUser currentUser,
+    IEfAuditor auditor,
     EfAuditingStructure structure,
-    AuditingEntityMapper<IPropertyChangeAudit, TAudit> mapper
-) : IEntityPropertyChangeTracker
-    where TAuditDbContext : DbContext
-    where TAudit : class, IPropertyChangeAudit
+    IAuditingEntityMapper<IPropertyChangeAudit, TAudit> mapper
+) : IAuditChangeTracker
+    where TAudit : class, IPropertyChangeAudit, IEntity
 {
     private class PropertyChangeAuditData : IPropertyChangeAudit
     {
@@ -61,34 +61,24 @@ internal class EntityPropertyChangeTracker<TAuditDbContext, TAudit>(
         var auditable = (IAuditable)entry.Entity;
 
         var metadata = structure.GetPropertyAuditingMetadata(auditable.GetType());
-        if (!metadata.IsAuditEnabled)
-            return;
-
-        var changes = TrackModifyProperties(
-            new Context
-            {
-                EntityId = auditable.GetAuditKey(),
-                EntityName = structure.TrackBy switch
-                {
-                    TrackBy.Database => entry.Metadata.GetTableName()
-                        ?? throw new DomainNotImplementedException("Table name not found"),
-                    TrackBy.Domain => auditable.GetType().Name,
-                    _ => throw new NotSupportedException(
-                        $"Not support this TrackBy value {structure.TrackBy}"
-                    ),
-                },
-                ModifiedAt = modifiedAt,
-                Metadata = metadata,
-            },
-            entry
-        );
-
-        auditDbContext.Set<TAudit>().AddRange(changes);
-
-        if (structure.HasDifferentDbContextForAuditChanges)
+        var context = new Context
         {
-            await auditDbContext.SaveChangesAsync(ct);
-        }
+            EntityId = auditable.GetAuditKey(),
+            EntityName = structure.TrackBy switch
+            {
+                TrackBy.Database => entry.Metadata.GetTableName()
+                    ?? throw new DomainNotImplementedException("Table name not found"),
+                TrackBy.Domain => auditable.GetType().Name,
+                _ => throw new NotSupportedException(
+                    $"Not support this TrackBy value {structure.TrackBy}"
+                ),
+            },
+            ModifiedAt = modifiedAt,
+            Metadata = metadata,
+        };
+
+        var changes = TrackModifyProperties(context, entry);
+        auditor.AddPropertyAuditings(changes);
     }
 
     private static bool NotEquals(object? val1, object? val2)
@@ -127,13 +117,63 @@ internal class EntityPropertyChangeTracker<TAuditDbContext, TAudit>(
     }
 
 #pragma warning disable EF1001
+    private record ReferenceEntryStackWithOwnedBy(ReferenceEntry Entry, string OwnedBy);
 
-    private IEnumerable<TAudit> TrackModifyProperties(
+    private static IEnumerable<ReferenceEntryStackWithOwnedBy> OwnedReferenceEntries(
+        EntityEntry entityEntry,
+        string ownedBy
+    )
+    {
+        return entityEntry
+            .References.Where(refEntry => refEntry.TargetEntry?.Metadata.IsOwned() ?? false)
+            .Select(refEntry => new ReferenceEntryStackWithOwnedBy(refEntry, ownedBy));
+    }
+
+    private IEnumerable<TAudit> TrackModifyProperties(Context context, EntityEntry entry)
+    {
+        foreach (var change in GetChanges(context, entry, null, "", false))
+            yield return change;
+
+        Stack<ReferenceEntryStackWithOwnedBy> stack = new(OwnedReferenceEntries(entry, ""));
+
+        while (stack.TryPop(out var item))
+        {
+            var (refEntry, ownedBy) = item;
+
+            foreach (
+                var ownedEntityAudit in GetChanges(
+                    context,
+                    refEntry.TargetEntry,
+                    refEntry.IsModified ? refEntry.TargetEntry?.GetInfrastructure() : null,
+                    ownedBy + refEntry.Metadata.Name + ".",
+                    refEntry.IsModified
+                )
+            )
+            {
+                yield return ownedEntityAudit;
+            }
+
+            if (refEntry.TargetEntry is { } targetRefEntry)
+            {
+                foreach (
+                    var ownedRefEntry in OwnedReferenceEntries(
+                        targetRefEntry,
+                        ownedBy + refEntry.Metadata.Name + "."
+                    )
+                )
+                {
+                    stack.Push(ownedRefEntry);
+                }
+            }
+        }
+    }
+
+    private IEnumerable<TAudit> GetChanges(
         Context context,
         EntityEntry? entry,
-        InternalEntityEntry? infrastructure = null,
-        string ownedBy = "",
-        bool isModify = false
+        InternalEntityEntry? infrastructure,
+        string ownedBy,
+        bool isModify
     )
     {
         if (!ownedBy.IsBlank() && isModify && infrastructure is not null)
@@ -180,7 +220,7 @@ internal class EntityPropertyChangeTracker<TAuditDbContext, TAudit>(
             var propertyAudit in entry
                 .Properties.Where(property =>
                     property.IsModified
-                    && context.Metadata.CanAudit(property.Metadata.Name)
+                    && context.Metadata.CanAudit(ownedBy + property.Metadata.Name)
                     && NotEquals(property.OriginalValue, property.CurrentValue)
                 )
                 .Select(property =>
@@ -194,21 +234,6 @@ internal class EntityPropertyChangeTracker<TAuditDbContext, TAudit>(
                 )
         )
             yield return propertyAudit;
-
-        foreach (
-            var ownedEntityAudit in entry
-                .References.Where(refEntry => refEntry.TargetEntry?.Metadata.IsOwned() ?? false)
-                .SelectMany(refEntry =>
-                    TrackModifyProperties(
-                        context,
-                        refEntry.TargetEntry,
-                        refEntry.IsModified ? refEntry.TargetEntry?.GetInfrastructure() : null,
-                        ownedBy + refEntry.Metadata.Name + ".",
-                        refEntry.IsModified
-                    )
-                )
-        )
-            yield return ownedEntityAudit;
     }
 }
 #pragma warning restore EF1001

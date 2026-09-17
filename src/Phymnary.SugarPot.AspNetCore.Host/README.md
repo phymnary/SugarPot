@@ -2,7 +2,17 @@
 
 Host bootstrapping utilities for SugarPot ASP.NET Core applications.
 
-This package currently provides a focused configuration extension to keep startup behavior consistent across services.
+This package provides a lightweight host-layer building block to keep startup behavior consistent across services.
+
+## Architecture
+
+`Phymnary.SugarPot.AspNetCore.Host` sits at the application host boundary and focuses on bootstrapping concerns only.
+
+- Keeps configuration composition logic close to host startup
+- Avoids leaking startup wiring into domain/application layers
+- Provides a single extension point for shared service defaults across multiple apps
+
+The package is intentionally minimal and can be used by both web hosts and generic hosts.
 
 ## What this package provides
 
@@ -16,6 +26,13 @@ This extension adds configuration sources in the following order:
 4. Environment variables
 
 Because later providers override earlier ones, environment variables remain the final override layer.
+
+## Feature summary
+
+- Deterministic configuration provider ordering
+- Environment-aware `appsettings.{env}.json` loading
+- Optional developer-local override file support (`appsettings.{env}.user.json`)
+- Compatibility with standard ASP.NET Core host bootstrapping patterns
 
 ## Installation
 
@@ -52,14 +69,23 @@ builder.Configuration.AddDefaults(builder.Environment.EnvironmentName);
 - Supports environment-specific and user-local override files
 - Preserves common ASP.NET Core environment variable override behavior
 
+## .NET requirements (high-level)
+
+- Use a supported modern .NET SDK used by this repository (currently .NET 8/9/10 family).
+- This package relies on `Microsoft.AspNetCore.App` and is intended for ASP.NET Core host environments.
+
+Basic local workflow:
+
+```bash
+dotnet restore
+dotnet build
+dotnet test
+```
+
 ## Related packages
 
 - Phymnary.SugarPot.AspNetCore.Api
 - Phymnary.SugarPot.AspNetCore.EntityFrameworkCore
-
-## Target frameworks
-
-Target frameworks are managed by project and solution build configuration.
 
 ## Contributing
 

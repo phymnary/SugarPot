@@ -9,7 +9,7 @@ public class TenantMissingInContextException(string message, Exception? innerExc
     public HttpStatusCode StatusCode => HttpStatusCode.Forbidden;
 
     public string? ErrorCode { get; private set; } =
-        DomainErrorCodeRegistry.DefaultTenantMissingInContextException;
+        DomainErrorCodeRegistry.DefaultTenantMissingInContextErrorCode;
 
     public TenantMissingInContextException WithErrorCode(string code)
     {

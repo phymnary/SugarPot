@@ -3,7 +3,6 @@
   <PropertyGroup>
     <RootNamespace>Phymnary.SugarPot.AspNetCore</RootNamespace>
     <Version>$(AspPackedVersion)</Version>
-    <_DotnetMajor>$(TargetFramework.Replace('net', '').Split('.')[0])</_DotnetMajor>
   </PropertyGroup>
 
   <Choose>

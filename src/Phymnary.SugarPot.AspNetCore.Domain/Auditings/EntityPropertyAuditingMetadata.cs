@@ -2,19 +2,12 @@ using System.Collections.Frozen;
 
 namespace Phymnary.SugarPot.AspNetCore.Auditings;
 
-public class EntityPropertyAuditingMetadata
+public class EntityPropertyAuditingMetadata(IEnumerable<string> auditingProperties)
 {
-    public bool IsAuditEnabled { get; set; }
-
-    public required FrozenSet<string> ValidAuditProperties { private get; init; }
-
-    public required FrozenSet<string> IgnoreAuditProperties { private get; init; }
+    private readonly FrozenSet<string> _auditingProperties = auditingProperties.ToFrozenSet();
 
     public bool CanAudit(string name)
     {
-        var isValid = ValidAuditProperties.Count == 0 || ValidAuditProperties.Contains(name);
-        var isNotIgnored = !IgnoreAuditProperties.Contains(name);
-
-        return isValid && isNotIgnored;
+        return _auditingProperties.Contains(name);
     }
 }

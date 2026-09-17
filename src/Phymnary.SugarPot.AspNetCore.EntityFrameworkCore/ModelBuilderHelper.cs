@@ -7,15 +7,21 @@ using static System.Linq.Expressions.Expression;
 
 namespace Phymnary.SugarPot.AspNetCore;
 
-public class ModelBuilderHelper(ModelBuilder builder)
+public class ModelBuilderHelper
 {
 #if NET10_0_OR_GREATER
-    public const string SoftDelelteQueryFilterName = "EFCore.Boilerplate.SoftDelete";
+    public const string SoftDelelteQueryFilterName = "EfCoreBoilerplate.SoftDelete";
 
-    public const string MultiTenancyQueryFilterName = "EFCore.Boilerplate.MultiTenancy";
+    public const string MultiTenancyQueryFilterName = "EfCoreBoilerplate.MultiTenancy";
 #endif
 
-    private ModelBuilder _builder = builder;
+    private ModelBuilder _builder;
+
+    public ModelBuilderHelper(ModelBuilder builder)
+    {
+        _builder = builder;
+        _builder.Ignore<EntityDomainStatus>();  
+    }
 
     public Expression<Func<Guid>>? TenantIdAccessor { private get; init; }
 

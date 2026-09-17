@@ -2,9 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Phymnary.SugarPot.AspNetCore.Auditings;
-using Phymnary.SugarPot.AspNetCore.Entities;
 using Phymnary.SugarPot.AspNetCore.Interceptors;
-using Phymnary.SugarPot.AspNetCore.Interceptors.Trackers;
 
 namespace Phymnary.SugarPot.AspNetCore;
 
@@ -13,79 +11,60 @@ public class EfServicesConfigurator<TDbContext>
 {
     private readonly IServiceCollection _services;
 
-    private bool _canAuditPropertyChange;
-
-    private readonly EfAuditingStructure _auditingMetadata = new();
-
-    private bool _canAudit;
+    private bool _hasConfigureAuditing = false;
 
     internal EfServicesConfigurator(IServiceCollection services)
     {
         _services = services;
-        // Order so that OnAttachedInterceptor is always the first interceptor to be executed, ensuring that entities are properly attached before any other interceptor runs.
-        _services.AddScoped<IInterceptor, OnAttachedInterceptor>();
-    }
-
-    private void RegisterAuditing()
-    {
-        if (_canAudit)
-            return;
-
-        _canAudit = true;
-        _services.AddScoped<IInterceptor, AuditOnSavingInterceptor>();
-    }
-
-    public EfServicesConfigurator<TDbContext> ConfigureAuditing(
-        Action<EfAuditingStructure> configure
-    )
-    {
-        configure(_auditingMetadata);
-        return this;
+        // Call first so that OnAttachedInterceptor is always the first interceptor to be executed, ensuring that entities are properly attached before any other interceptor runs.
+        _services.AddScoped<IEfOnSavingEffect, OnAttachedInterceptor<TDbContext>>();
     }
 
     public EfServicesConfigurator<TDbContext> AddSoftDelete()
     {
-        _services.AddScoped<IInterceptor, SoftDeleteInterceptor>();
+        _services.AddScoped<IEfOnSavingEffect, SoftDeleteInterceptor<TDbContext>>();
         return this;
     }
 
     public EfServicesConfigurator<TDbContext> AddMultiTenancy()
     {
-        _services.AddScoped<IInterceptor, SetTenantOnSavingInterceptor>();
+        _services.AddScoped<IEfOnSavingEffect, SetTenantOnSavingInterceptor<TDbContext>>();
         return this;
     }
 
-    public EfServicesConfigurator<TDbContext> AddPropertyChangeAudit<TAuditDbContext, TAudit>(
-        Func<IPropertyChangeAudit, TAudit> mapper
+    public void CheckIfAuditingIsAlreadyConfigured()
+    {
+        if (_hasConfigureAuditing)
+            throw new InvalidOperationException("Auditing is already configured.");
+        _hasConfigureAuditing = true;
+    }
+
+    public EfServicesConfigurator<TDbContext> AddAuditing(
+        Action<EfAuditingServiceConfigurator<TDbContext>> auditConfigurator
     )
-        where TAuditDbContext : DbContext
-        where TAudit : class, IPropertyChangeAudit, IEntity
     {
-        RegisterAuditing();
-        _canAuditPropertyChange = true;
-
-        _services
-            .AddScoped<
-                IEntityPropertyChangeTracker,
-                EntityPropertyChangeTracker<TAuditDbContext, TAudit>
-            >()
-            .AddSingleton(new AuditingEntityMapper<IPropertyChangeAudit, TAudit> { Map = mapper });
-
-        _auditingMetadata.HasDifferentDbContextForAuditChanges =
-            typeof(TAuditDbContext) != typeof(TDbContext);
-
+        CheckIfAuditingIsAlreadyConfigured();
+        _services.AddScoped<IEfOnSavingEffect, AuditOnSavingInterceptor<TDbContext>>();
+        var auditingServiceConfigurator = new EfAuditingServiceConfigurator<TDbContext>(
+            _services,
+            typeof(TDbContext)
+        );
+        auditConfigurator.Invoke(auditingServiceConfigurator);
         return this;
     }
 
-    public IServiceCollection Build()
+    public EfServicesConfigurator<TDbContext> AddAuditing<TAuditingDbContext>(
+        Action<EfAuditingServiceConfigurator<TAuditingDbContext>> auditConfigurator
+    )
+        where TAuditingDbContext : DbContext
     {
-        if (!_canAuditPropertyChange)
-            _services.AddSingleton<IEntityPropertyChangeTracker>(
-                new EmptyEntityPropertyChangeTracker()
-            );
-
-        _services.AddSingleton(_auditingMetadata);
-
-        return _services;
+        CheckIfAuditingIsAlreadyConfigured();
+        _services.AddScoped<IEfOnSavingEffect, AuditOnSavingInterceptor<TAuditingDbContext>>();
+        var auditingServiceConfigurator = new EfAuditingServiceConfigurator<TAuditingDbContext>(
+            _services,
+            typeof(TDbContext)
+        );
+        auditConfigurator.Invoke(auditingServiceConfigurator);
+        return this;
     }
 }

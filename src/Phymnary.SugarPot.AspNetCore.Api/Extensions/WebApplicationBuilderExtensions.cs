@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
+using Phymnary.SugarPot.AspNetCore.Api;
 using Phymnary.SugarPot.AspNetCore.MultiTenancy;
 using Phymnary.SugarPot.AspNetCore.Security;
 
@@ -16,10 +17,6 @@ namespace Phymnary.SugarPot.AspNetCore.Extensions;
 /// </summary>
 public static class WebApplicationBuilderExtensions
 {
-    public static string SubClaimName { get; set; } = "sub";
-
-    public static string TenantClaimName { get; set; } = "tid";
-
     public static WebApplication UseBoilerplateServices(this WebApplication app)
     {
         app.Use(
@@ -32,7 +29,7 @@ public static class WebApplicationBuilderExtensions
                     provider.Set(context.RequestAborted);
 
                 if (
-                    context.User.FindFirstValue(SubClaimName) is { } subId
+                    context.User.FindFirstValue(AspClaimNames.UserId) is { } subId
                     && Guid.TryParse(subId, out var currentUserId)
                     && context.RequestServices.GetService<ICurrentUser>()
                         is HttpContextCurrentUser currentUser
@@ -40,7 +37,7 @@ public static class WebApplicationBuilderExtensions
                     currentUser.Id = currentUserId;
 
                 if (
-                    context.User.FindFirstValue(TenantClaimName) is { } tenantId
+                    context.User.FindFirstValue(AspClaimNames.TenantId) is { } tenantId
                     && Guid.TryParse(tenantId, out var currentTenantId)
                     && context.RequestServices.GetService<ICurrentTenant>()
                         is HttpContextCurrentTenant currentTenant

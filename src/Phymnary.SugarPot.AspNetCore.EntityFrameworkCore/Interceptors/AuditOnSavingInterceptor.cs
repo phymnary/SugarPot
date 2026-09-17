@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Phymnary.SugarPot.AspNetCore.Auditings;
 using Phymnary.SugarPot.AspNetCore.Interceptors.Trackers;
 using Phymnary.SugarPot.AspNetCore.Security;
@@ -8,56 +7,37 @@ using Phymnary.SugarPot.Module.Extensions;
 
 namespace Phymnary.SugarPot.AspNetCore.Interceptors;
 
-public class AuditOnSavingInterceptor(
+internal class AuditOnSavingInterceptor<TDbContext>(
+    TDbContext dbContext,
     ICurrentUser currentUser,
-    IEntityPropertyChangeTracker propertyChangeTracker,
+    IEnumerable<IAuditChangeTracker> changeTrackers,
     IRunAt requestedAt
-) : SaveChangesInterceptor
+) : IEfOnSavingEffect
+    where TDbContext : DbContext
 {
-    public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
-        DbContextEventData eventData,
-        InterceptionResult<int> result,
-        CancellationToken cancellationToken = default
-    )
+    private readonly DateTimeOffset _at = requestedAt.Value;
+
+    public async ValueTask RunAsync(CancellationToken cancellationToken = default)
     {
-        if (eventData.Context is not { } dbContext)
-            return await base.SavingChangesAsync(eventData, result, cancellationToken);
-
-        var now = requestedAt.Value;
-
         foreach (var entry in dbContext.ChangeTracker.Entries<IAuditable>())
             switch (entry.State)
             {
                 case EntityState.Added:
-                    entry.Property(e => e.CreatedAt).CurrentValue = now;
+                    entry.Property(e => e.CreatedAt).CurrentValue = _at;
                     entry.Property(e => e.CreatedById).CurrentValue = currentUser.Id.NullIfEmpty();
                     break;
                 case EntityState.Modified:
-                    await AuditChangesAsync(entry, now, cancellationToken);
+                    await AuditChangesAsync(entry, cancellationToken);
                     break;
                 case EntityState.Unchanged:
                     if (IsModified(entry))
-                        await AuditChangesAsync(entry, now, cancellationToken);
+                        await AuditChangesAsync(entry, cancellationToken);
                     break;
                 case EntityState.Detached:
                 case EntityState.Deleted:
                 default:
                     break;
             }
-
-        return await base.SavingChangesAsync(eventData, result, cancellationToken);
-    }
-
-    private async Task AuditChangesAsync(
-        EntityEntry<IAuditable> entry,
-        DateTimeOffset now,
-        CancellationToken ct
-    )
-    {
-        await propertyChangeTracker.TrackAsync(entry, now, ct);
-
-        entry.Property(e => e.UpdatedAt).CurrentValue = now;
-        entry.Property(e => e.UpdatedById).CurrentValue = currentUser.Id.NullIfEmpty();
     }
 
     private static bool IsModified(EntityEntry entry)
@@ -68,5 +48,16 @@ public class AuditOnSavingInterceptor(
                 && refEntry.TargetEntry.Metadata.IsOwned()
                 && (refEntry.IsModified || IsModified(refEntry.TargetEntry))
             );
+    }
+
+    public async Task AuditChangesAsync(EntityEntry<IAuditable> entry, CancellationToken ct)
+    {
+        foreach (var tracker in changeTrackers)
+        {
+            await tracker.TrackAsync(entry, _at, ct);
+        }
+
+        entry.Property(e => e.UpdatedAt).CurrentValue = _at;
+        entry.Property(e => e.UpdatedById).CurrentValue = currentUser.Id.NullIfEmpty();
     }
 }

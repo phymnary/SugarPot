@@ -6,7 +6,7 @@ public static class DomainErrorCodeRegistry
 
     public static string? DefaultEntityValidationErrorCode { get; set; }
 
-    public static string? DefaultTenantMissingInContextException { get; set; }
+    public static string? DefaultTenantMissingInContextErrorCode { get; set; }
 
-    public static string? DefaultEntityPersistenceException { get; set; }
+    public static string? DefaultEntityPersistenceErrorCode { get; set; }
 }

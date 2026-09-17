@@ -11,7 +11,7 @@
     <Authors>Bsweest</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryType>git</RepositoryType>
-    <RepositoryUrl>https://github.com/Phymnary/SugarPot</RepositoryUrl>
+    <RepositoryUrl>https://github.com/phymnary/SugarPot</RepositoryUrl>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">

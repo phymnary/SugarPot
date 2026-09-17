@@ -5,18 +5,15 @@ using Phymnary.SugarPot.AspNetCore.MultiTenancy;
 
 namespace Phymnary.SugarPot.AspNetCore.Interceptors;
 
-public class SetTenantOnSavingInterceptor(ICurrentTenant currentTenant) : SaveChangesInterceptor
+public class SetTenantOnSavingInterceptor<TDbContext>(
+    TDbContext dbContext,
+    ICurrentTenant currentTenant
+) : IEfOnSavingEffect
+    where TDbContext : DbContext
 {
-    public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
-        DbContextEventData eventData,
-        InterceptionResult<int> result,
-        CancellationToken ct = default
-    )
+    public ValueTask RunAsync(CancellationToken ct = default)
     {
-        if (eventData.Context is null)
-            return base.SavingChangesAsync(eventData, result, ct);
-
-        foreach (var entry in eventData.Context.ChangeTracker.Entries<IMultiTenant>())
+        foreach (var entry in dbContext.ChangeTracker.Entries<IMultiTenant>())
             switch (entry.State)
             {
                 case EntityState.Added:
@@ -32,6 +29,6 @@ public class SetTenantOnSavingInterceptor(ICurrentTenant currentTenant) : SaveCh
                     break;
             }
 
-        return base.SavingChangesAsync(eventData, result, ct);
+        return ValueTask.CompletedTask;
     }
 }

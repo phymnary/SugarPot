@@ -1,5 +1,8 @@
-﻿namespace Phymnary.SugarPot.AspNetCore.Entities;
+﻿using System.ComponentModel.DataAnnotations.Schema;
 
+namespace Phymnary.SugarPot.AspNetCore.Entities;
+
+[NotMapped]
 public class EntityDomainStatus
 {
     /// <summary>

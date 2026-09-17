@@ -15,16 +15,13 @@ public static class ServiceCollectionExtensions
         var configurator = new EfServicesConfigurator<TDbContext>(services);
         configure?.Invoke(configurator);
 
-        return ConfigUnderlayAddEfServices(configurator);
+        return AddUnderlayServices<TDbContext>(services);
     }
 
-    private static IServiceCollection ConfigUnderlayAddEfServices<TDbContext>(
-        EfServicesConfigurator<TDbContext> configurator
-    )
+    private static IServiceCollection AddUnderlayServices<TDbContext>(IServiceCollection services)
         where TDbContext : DbContext
     {
-        return configurator
-            .Build()
+        return services
             .AddScoped<IDbFunctionProvider, DbFunctionProvider<TDbContext>>()
             .AddScoped<EfDbStateManager>()
             .AddScoped<EfRepositoryAddons>();

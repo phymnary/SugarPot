@@ -1,11 +1,9 @@
 using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Phymnary.SugarPot.AspNetCore.Entities;
 
 public interface IEntity
 {
-    [NotMapped]
     EntityDomainStatus DomainStatus { get; }
 }
 

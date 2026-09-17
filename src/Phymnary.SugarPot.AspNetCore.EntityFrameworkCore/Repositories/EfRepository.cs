@@ -57,6 +57,11 @@ public abstract class EfRepository<TDbContext, TEntity>(
     {
         try
         {
+            foreach (var interceptor in addons.SavingInterceptors)
+            {
+                await interceptor.RunAsync(ct);
+            }
+
             return await dbContext.SaveChangesAsync(
                 acceptAllChangesOnSuccess: !addons.DbStateManager.IsExecutionStrategyInTransaction,
                 cancellationToken: ct

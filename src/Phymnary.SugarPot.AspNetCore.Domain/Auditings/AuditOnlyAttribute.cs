@@ -5,7 +5,7 @@ namespace Phymnary.SugarPot.AspNetCore.Auditings;
 /// </summary>
 /// <param name="properties">Only audited these properties</param>
 [AttributeUsage(AttributeTargets.Class)]
-public class AuditingAttribute(params string[] properties) : Attribute
+public class AuditOnlyAttribute(params string[] properties) : Attribute
 {
-    public string[] Properties { get; } = properties;
+    public string[] PropertyNames { get; } = properties;
 }
