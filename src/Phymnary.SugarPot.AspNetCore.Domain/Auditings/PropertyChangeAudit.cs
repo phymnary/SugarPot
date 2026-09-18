@@ -1,6 +1,6 @@
 namespace Phymnary.SugarPot.AspNetCore.Auditings;
 
-public interface IPropertyChangeAudit
+public interface IPropertyChangeAudit : IAudit
 {
     string EntityName { get; }
 

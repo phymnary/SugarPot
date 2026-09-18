@@ -12,14 +12,12 @@ public class EfAuditingServiceConfigurator<TAuditingDbContext>
 
     private readonly EfAuditingStructure _auditingStructure = new();
 
-    internal EfAuditingServiceConfigurator(IServiceCollection services, Type mainDbContextType)
+    internal EfAuditingServiceConfigurator(IServiceCollection services)
     {
         _services = services;
 
         _services.AddSingleton(_auditingStructure);
-        _services.AddScoped<IEfAuditor, EfAuditor<TAuditingDbContext>>();
-        _auditingStructure.HasDifferentDbContextForAuditing =
-            typeof(TAuditingDbContext) != mainDbContextType;
+        _services.AddScoped<IAuditor, EfAuditor<TAuditingDbContext>>();
     }
 
     public EfAuditingServiceConfigurator<TAuditingDbContext> ConfigureStructure(
@@ -31,14 +29,14 @@ public class EfAuditingServiceConfigurator<TAuditingDbContext>
     }
 
     public EfAuditingServiceConfigurator<TAuditingDbContext> AddPropertyChangeAudit<TAudit>(
-        Func<IPropertyChangeAudit, TAudit>? mapper = null
+        Func<PropertyChangeAuditHydration, TAudit>? mapper = null
     )
         where TAudit : class, IPropertyChangeAudit, IEntity
     {
         if (mapper != null)
         {
-            _services.AddSingleton<IAuditingEntityMapper<IPropertyChangeAudit, TAudit>>(
-                new AuditingEntityMapper<IPropertyChangeAudit, TAudit> { MapFn = mapper }
+            _services.AddSingleton<IAuditingEntityMapper<TAudit>>(
+                new AuditingEntityMapper<TAudit> { MapFn = mapper }
             );
         }
 

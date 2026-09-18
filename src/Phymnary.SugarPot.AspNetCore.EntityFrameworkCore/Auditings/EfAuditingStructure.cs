@@ -1,7 +1,6 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
-using Phymnary.SugarPot.AspNetCore.Extensions;
 using Phymnary.SugarPot.Module.Extensions;
 
 namespace Phymnary.SugarPot.AspNetCore.Auditings;
@@ -17,8 +16,6 @@ public class EfAuditingStructure
         Type,
         EntityPropertyAuditingMetadata
     > _propertyAuditingMetadataCaches = [];
-
-    internal bool HasDifferentDbContextForAuditing { get; set; }
 
     public TrackBy TrackBy { internal get; set; }
 
@@ -37,6 +34,7 @@ public class EfAuditingStructure
             if (
                 propertyInfo.HasAttribute<DisabledAuditingAttribute>()
                 || propertyInfo.HasAttribute<NotMappedAttribute>()
+                || propertyInfo.PropertyType.HasAttribute<NotMappedAttribute>()
             )
                 continue;
 

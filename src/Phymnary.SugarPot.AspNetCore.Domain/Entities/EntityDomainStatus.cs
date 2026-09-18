@@ -1,4 +1,8 @@
 ﻿using System.ComponentModel.DataAnnotations.Schema;
+using System.Runtime.CompilerServices;
+
+[assembly: InternalsVisibleTo("Phymnary.SugarPot.AspNetCore.EntityFrameworkCore")]
+[assembly: InternalsVisibleTo("Phymnary.SugarPot.AspNetCore.EntityFrameworkCore.Tests")]
 
 namespace Phymnary.SugarPot.AspNetCore.Entities;
 
@@ -9,12 +13,12 @@ public class EntityDomainStatus
     /// If true, entity's state will become added in DbContext when run EfRepository.UpdateAsync.
     /// Main usage is for adding non-aggregate root entity
     /// </summary>
-    public bool IsAdded { get; private set; }
+    internal bool IsAdded { get; private set; }
 
     /// <summary>
     /// If true, modify the entity soft delete properties when run EfRepository.UpdateAsync.
     /// </summary>
-    public bool IsSoftDeleted { get; private set; }
+    internal bool IsSoftDeleted { get; private set; }
 
     public void OnAttached()
     {
@@ -26,12 +30,12 @@ public class EntityDomainStatus
         IsSoftDeleted = true;
     }
 
-    public void GotAdded()
+    internal void GotAdded()
     {
         IsAdded = false;
     }
 
-    public void GotSoftDeleted()
+    internal void GotSoftDeleted()
     {
         IsSoftDeleted = false;
     }

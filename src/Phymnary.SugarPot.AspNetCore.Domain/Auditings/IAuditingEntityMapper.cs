@@ -1,7 +1,7 @@
 namespace Phymnary.SugarPot.AspNetCore.Auditings;
 
-public interface IAuditingEntityMapper<TConcrete, TImplement>
+public interface IAuditingEntityMapper<TImplement>
     where TImplement : class
 {
-    TImplement Map(TConcrete concrete);
+    TImplement Map(PropertyChangeAuditHydration concrete);
 }

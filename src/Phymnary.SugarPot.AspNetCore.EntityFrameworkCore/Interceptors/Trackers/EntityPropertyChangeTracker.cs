@@ -4,7 +4,6 @@ using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.ChangeTracking.Internal;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Phymnary.SugarPot.AspNetCore.Auditings;
-using Phymnary.SugarPot.AspNetCore.Entities;
 using Phymnary.SugarPot.AspNetCore.Exceptions;
 using Phymnary.SugarPot.AspNetCore.Extensions;
 using Phymnary.SugarPot.AspNetCore.Security;
@@ -12,33 +11,14 @@ using Phymnary.SugarPot.Module.Extensions;
 
 namespace Phymnary.SugarPot.AspNetCore.Interceptors.Trackers;
 
-internal class EntityPropertyChangeTracker<TAudit>(
+internal partial class EntityPropertyChangeTracker<TAudit>(
     ICurrentUser currentUser,
-    IEfAuditor auditor,
+    IAuditor auditor,
     EfAuditingStructure structure,
-    IAuditingEntityMapper<IPropertyChangeAudit, TAudit> mapper
+    IAuditingEntityMapper<TAudit> mapper
 ) : IAuditChangeTracker
-    where TAudit : class, IPropertyChangeAudit, IEntity
+    where TAudit : class, IAudit
 {
-    private class PropertyChangeAuditData : IPropertyChangeAudit
-    {
-        public required string EntityName { get; init; }
-
-        public required string PropertyName { get; init; }
-
-        public required string TypeName { get; init; }
-
-        public required string EntityId { get; init; }
-
-        public required string OldValue { get; init; }
-
-        public required string NewValue { get; init; }
-
-        public Guid? ModifiedById { get; init; }
-
-        public DateTimeOffset ModifiedAt { get; init; }
-    }
-
     private class Context
     {
         public required string EntityId { get; init; }
@@ -76,7 +56,7 @@ internal class EntityPropertyChangeTracker<TAudit>(
         };
 
         var changes = TrackModifyProperties(context, entry);
-        auditor.AddPropertyAuditings(changes);
+        auditor.Add(changes);
     }
 
     private static bool NotEquals(object? val1, object? val2)
@@ -93,7 +73,7 @@ internal class EntityPropertyChangeTracker<TAudit>(
     )
     {
         return mapper.Map(
-            new PropertyChangeAuditData
+            new PropertyChangeAuditHydration
             {
                 EntityId = context.EntityId,
                 EntityName = context.EntityName,

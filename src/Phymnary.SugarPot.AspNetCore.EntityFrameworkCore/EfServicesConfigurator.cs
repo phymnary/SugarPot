@@ -1,8 +1,8 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Phymnary.SugarPot.AspNetCore.Auditings;
 using Phymnary.SugarPot.AspNetCore.Interceptors;
+using Phymnary.SugarPot.AspNetCore.Repositories.SaveChangesStrategies;
 
 namespace Phymnary.SugarPot.AspNetCore;
 
@@ -12,6 +12,7 @@ public class EfServicesConfigurator<TDbContext>
     private readonly IServiceCollection _services;
 
     private bool _hasConfigureAuditing = false;
+    private Type _saveChangesStrategy = typeof(DefaultSaveChangesStrategy);
 
     internal EfServicesConfigurator(IServiceCollection services)
     {
@@ -46,10 +47,7 @@ public class EfServicesConfigurator<TDbContext>
         CheckIfAuditingIsAlreadyConfigured();
 
         _services.AddScoped<IEfOnSavingEffect, AuditOnSavingInterceptor<TDbContext>>();
-        var auditingServiceConfigurator = new EfAuditingServiceConfigurator<TDbContext>(
-            _services,
-            typeof(TDbContext)
-        );
+        var auditingServiceConfigurator = new EfAuditingServiceConfigurator<TDbContext>(_services);
         auditConfigurator.Invoke(auditingServiceConfigurator);
         return this;
     }
@@ -60,13 +58,20 @@ public class EfServicesConfigurator<TDbContext>
         where TAuditingDbContext : DbContext
     {
         CheckIfAuditingIsAlreadyConfigured();
+        _saveChangesStrategy =
+            typeof(DifferentDbContextAuditSaveChangesStrategy<TAuditingDbContext>);
 
         _services.AddScoped<IEfOnSavingEffect, AuditOnSavingInterceptor<TAuditingDbContext>>();
         var auditingServiceConfigurator = new EfAuditingServiceConfigurator<TAuditingDbContext>(
-            _services,
-            typeof(TDbContext)
+            _services
         );
         auditConfigurator.Invoke(auditingServiceConfigurator);
         return this;
+    }
+
+    internal IServiceCollection Finish()
+    {
+        _services.AddScoped(typeof(ISaveChangesStrategy), _saveChangesStrategy);
+        return _services;
     }
 }

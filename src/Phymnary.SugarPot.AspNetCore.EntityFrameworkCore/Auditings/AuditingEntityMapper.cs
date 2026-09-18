@@ -1,12 +1,11 @@
 ﻿namespace Phymnary.SugarPot.AspNetCore.Auditings;
 
-internal class AuditingEntityMapper<TConcrete, TImplement>
-    : IAuditingEntityMapper<TConcrete, TImplement>
+internal class AuditingEntityMapper<TImplement> : IAuditingEntityMapper<TImplement>
     where TImplement : class
 {
-    public required Func<TConcrete, TImplement> MapFn { get; init; }
+    public required Func<PropertyChangeAuditHydration, TImplement> MapFn { get; init; }
 
-    public TImplement Map(TConcrete concrete)
+    public TImplement Map(PropertyChangeAuditHydration concrete)
     {
         return MapFn(concrete);
     }

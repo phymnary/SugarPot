@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Phymnary.SugarPot.AspNetCore.Exceptions;
 using Phymnary.SugarPot.AspNetCore.Repositories;
 
 namespace Phymnary.SugarPot.AspNetCore;

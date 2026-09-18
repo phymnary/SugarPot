@@ -2,7 +2,7 @@
   <PropertyGroup>
     <NoWarn>$(NoWarn);NU1507</NoWarn>
     
-    <AspPackedVersion>1.2.1</AspPackedVersion>
+    <AspPackedVersion>1.2.2</AspPackedVersion>
     <DIPackedVersion>1.0.2</DIPackedVersion>
   </PropertyGroup>
 </Project>
