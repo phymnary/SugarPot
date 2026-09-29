@@ -31,12 +31,12 @@ internal partial class EntityPropertyChangeTracker<TAudit>(
     }
 
     public async ValueTask TrackAsync(
-        EntityEntry entry,
+        EntityEntry<IAuditable> entry,
         DateTimeOffset modifiedAt,
-        CancellationToken ct
+        CancellationToken ct = default
     )
     {
-        var auditable = (IAuditable)entry.Entity;
+        var auditable = entry.Entity;
 
         var metadata = structure.GetPropertyAuditingMetadata(auditable.GetType());
         var context = new Context

@@ -31,7 +31,7 @@ public class EfAuditingServiceConfigurator<TAuditingDbContext>
     public EfAuditingServiceConfigurator<TAuditingDbContext> AddPropertyChangeAudit<TAudit>(
         Func<PropertyChangeAuditHydration, TAudit>? mapper = null
     )
-        where TAudit : class, IPropertyChangeAudit, IEntity
+        where TAudit : class, IPropertyChangeAudit
     {
         if (mapper != null)
         {

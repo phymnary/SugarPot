@@ -1,7 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
-using Phymnary.SugarPot.AspNetCore.Api;
 using Phymnary.SugarPot.AspNetCore.MultiTenancy;
 using Phymnary.SugarPot.AspNetCore.Security;
 

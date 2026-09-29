@@ -1,4 +1,4 @@
-﻿namespace Phymnary.SugarPot.AspNetCore.Api;
+﻿namespace Phymnary.SugarPot.AspNetCore.Security;
 
 public static class AspClaimNames
 {
