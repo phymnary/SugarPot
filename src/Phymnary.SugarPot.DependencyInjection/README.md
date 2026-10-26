@@ -1,80 +1,64 @@
 # Phymnary.SugarPot.DependencyInjection
 
-Lightweight primitives for convention-based dependency registration.
+Attribute-based service registration for `Microsoft.Extensions.DependencyInjection`. The registration code is generated at build time, so there is no reflection or assembly scanning at runtime.
 
-This project provides simple contracts and attributes to standardize how services are discovered and added to the .NET `IServiceCollection`.
-
-## Features
-
-- `IAutoRegister` interface for explicit dependency registration
-- `[Auto]` marker attribute for discoverable classes
-- `[Service(Lifetime)]` attribute to declare service lifetime
-- `Lifetime` enum (`Singleton`, `Scoped`, `Transient`)
-- Optional self-registration with `ServiceAttribute.IsSelf`
-
-## Installation
-
-`Install-Package Phymnary.SugarPot.DependencyInjection`
-
-## API Overview
-
-### `IAutoRegister`
-
-Implement this interface when a module/class should register dependencies manually:
-
-```csharp
-using Microsoft.Extensions.DependencyInjection;
-using Phymnary.SugarPot.DependencyInjection;
-
-public sealed class UserAutoRegister : IAutoRegister
-{
-    public void AddDependencies(IServiceCollection services)
-    {
-        services.AddScoped<IUserRepository, UserRepository>();
-    }
-}
+```bash
+dotnet add package Phymnary.SugarPot.DependencyInjection
 ```
 
-### `[Auto]`
+The source generator ships inside the package.
 
-Use this marker attribute to indicate a class is eligible for automatic discovery/registration by consumers:
+## Usage
 
-```csharp
-using Phymnary.SugarPot.DependencyInjection;
-
-[Auto]
-public sealed class BackgroundJobRunner
-{
-}
-```
-
-### `[Service]`
-
-Use this attribute to declare the intended lifetime:
+### 1. Mark services
 
 ```csharp
 using Phymnary.SugarPot.DependencyInjection;
+
+public interface IEmailSender { }
 
 [Service(Lifetime.Scoped)]
-public sealed class UserService : IUserService
-{
-}
+public class SmtpEmailSender : IEmailSender { }       // registered as IEmailSender
+
+[Service(Lifetime.Singleton, IsSelf = true)]
+public class CacheWarmer : IHostedService { ... }    // registered as CacheWarmer
 ```
 
-Register as self (concrete type) when needed:
+### 2. Create a registrar
+
+Put `[Auto]` on a `partial` class. The generator makes it implement `IAutoRegister` and fills `AddDependencies` with every `[Service]` class in the project:
 
 ```csharp
-[Service(Lifetime.Singleton, IsSelf = true)]
-public sealed class CacheWarmupService
-{
-}
+[Auto]
+public partial class AppServices;
+
+new AppServices().AddDependencies(builder.Services);
 ```
 
-## Notes
+With the [Module](../Phymnary.SugarPot.Module/README.md) package, put `[Auto]` on your module. `AddModule<T>()` then calls `AddDependencies` for you.
 
-- This project intentionally stays minimal and framework-agnostic.
-- Actual assembly scanning/registration behavior is implemented by consuming projects.
+## How the service type is chosen
 
-## Target Frameworks
+| Condition | Registered as |
+|---|---|
+| `IsSelf = true` | The class itself |
+| The class declares interfaces | The **first** interface declared on the class |
+| Only the base class declares interfaces | The first interface of the direct base class |
+| No interfaces | The class itself |
 
-- .NET Standard 2.1
+The generated code is `services.Add{Lifetime}<TService, TImplementation>()`.
+
+## Rules
+
+- `[Service]` classes must not be abstract or generic. Otherwise you get build error `SPDI0001`.
+- The `[Auto]` class must be `partial`. Otherwise it is skipped.
+- Only the first interface is registered. To register more than one interface, implement `IAutoRegister` by hand.
+
+## API
+
+| Type | Description |
+|---|---|
+| `ServiceAttribute(Lifetime)` | Marks a class for registration. `IsSelf` registers the concrete type |
+| `Lifetime` | `Singleton`, `Scoped`, `Transient` |
+| `AutoAttribute` | Generates an `IAutoRegister` implementation on a partial class |
+| `IAutoRegister` | `void AddDependencies(IServiceCollection services)`. You can also implement it by hand |

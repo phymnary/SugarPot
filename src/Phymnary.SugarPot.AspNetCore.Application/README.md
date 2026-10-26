@@ -1,125 +1,56 @@
 # Phymnary.SugarPot.AspNetCore.Application
 
-Application-layer runtime helpers and HTTP-aware exception types for SugarPot ASP.NET Core solutions.
-
-This package adds a small runtime service registration (`IRunAt`) and a set of application exception types that expose HTTP status semantics through `IBusinessException`.
-
-## Package scope
-
-Root namespace:
-
-`Phymnary.SugarPot.AspNetCore`
-
-Primary areas:
-
-- DI extension for application services
-- Scoped runtime timestamp provider
-- Application exception types for common HTTP outcomes
-
-## Public API
-
-### Service registration
-
-- `ServiceCollectionExtensions.AddApplicationServices(IServiceCollection)`
-  - Registers `IRunAt` as scoped.
-
-### Runtime service
-
-- `IRunAt` (from Domain package)
-  - `DateTimeOffset Value { get; }`
-  - Implementation (`RunAt`) is internal and returns `DateTimeOffset.UtcNow` at resolution time.
-
-Because `IRunAt` is scoped, the same `Value` is reused within the same DI scope.
-
-### Exception types
-
-All exception types below:
-
-- Derive from `Exception`
-- Implement `IBusinessException` (through an internal `IApplicationException` marker)
-- Expose `HttpStatusCode StatusCode`
-- Support optional `ErrorCode` via `WithErrorCode(string code)`
-
-Mappings:
-
-- `AspBadRequestException` -> `400 BadRequest`
-- `AspUnauthorizedException` -> `401 Unauthorized`
-- `AspForbiddenEndpointException` -> `403 Forbidden`
-- `AspInvalidOperationException` -> `422 UnprocessableEntity`
-- `InternalServiceUnavailableException` -> `503 ServiceUnavailable`
-
-## Installation
-
-NuGet:
+Application-layer helpers for SugarPot: a per-scope timestamp (`IRunAt`) and exceptions that map to HTTP status codes.
 
 ```bash
 dotnet add package Phymnary.SugarPot.AspNetCore.Application
 ```
 
-## Usage
+It depends on [`AspNetCore.Domain`](../Phymnary.SugarPot.AspNetCore.Domain/README.md) and the `Microsoft.AspNetCore.App` framework. [`AspNetCore.Api`](../Phymnary.SugarPot.AspNetCore.Api/README.md) references it, so you get it automatically with that package.
 
-### Register application services
+## `IRunAt`: one timestamp per request
 
 ```csharp
 using Phymnary.SugarPot.AspNetCore.Extensions;
 
-builder.Services.AddApplicationServices();
+builder.Services.AddApplicationServices(); // registers IRunAt as scoped
 ```
 
-### Consume `IRunAt`
+`IRunAt.Value` is `DateTimeOffset.UtcNow`, read once when the service is first resolved in a scope. Everything in the same request sees the same time. The EF Core package uses it for `CreatedAt`, `UpdatedAt`, and `DeletedAt`.
 
 ```csharp
-using Phymnary.SugarPot.AspNetCore;
-
-public sealed class RequestAuditService(IRunAt runAt)
+public class InvoiceService(IRunAt runAt)
 {
-    public DateTimeOffset RequestedAt => runAt.Value;
+    public Invoice Create() => new() { IssuedAt = runAt.Value };
 }
 ```
 
-### Throw standardized application exceptions
+## Exceptions
+
+All of these implement `IBusinessException`, so the Api package's exception handler returns them with the matching status code.
+
+| Exception | Status |
+|---|---|
+| `AspBadRequestException` | 400 Bad Request |
+| `AspUnauthorizedException` | 401 Unauthorized |
+| `AspForbiddenEndpointException` | 403 Forbidden |
+| `AspInvalidOperationException` | 422 Unprocessable Entity |
+| `InternalServiceUnavailableException` | 503 Service Unavailable |
+
+Each one takes `(string message, Exception? innerException = null)` and supports a fluent error code:
 
 ```csharp
 using Phymnary.SugarPot.AspNetCore.Exceptions;
 
-if (string.IsNullOrWhiteSpace(name))
-{
-    throw new AspBadRequestException("Name is required")
-        .WithErrorCode("APP_VALIDATION_NAME_REQUIRED");
-}
-
-if (!hasPermission)
-{
-    throw new AspForbiddenEndpointException("Permission denied")
-        .WithErrorCode("APP_AUTH_FORBIDDEN");
-}
+if (string.IsNullOrWhiteSpace(request.Name))
+    throw new AspBadRequestException("Name is required").WithErrorCode("NAME_REQUIRED");
 ```
 
-## Error handling guidance
+## Claim names
 
-These exception types are intended to be translated by API middleware or exception handlers into HTTP responses. A common response payload includes:
+`AspClaimNames` (namespace `Phymnary.SugarPot.AspNetCore.Security`) holds the claim types the Api package reads:
 
-- `status` from `StatusCode`
-- `message` from `Exception.Message`
-- optional `errorCode` from `ErrorCode`
+- `UserId` is `"sub"`.
+- `TenantId` is `"tid"`.
 
-## Target frameworks
-
-Frameworks are inherited from the repository build configuration:
-
-- `net8.0`
-- `net9.0`
-- `net10.0`
-
-## Dependencies
-
-- Project reference: `Phymnary.SugarPot.AspNetCore.Domain`
-- Framework reference: `Microsoft.AspNetCore.App`
-
-## Build metadata
-
-Package version is sourced from `$(AspPackedVersion)`.
-
-## License
-
-See repository root for license details.
+Use these constants when you issue tokens.

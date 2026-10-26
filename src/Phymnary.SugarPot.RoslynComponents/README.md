@@ -1,90 +1,58 @@
 # Phymnary.SugarPot.RoslynComponents
 
-Shared Roslyn utilities for analyzers and source generators in the SugarPot solution.
+Shared helpers for writing incremental source generators and analyzers. The SugarPot generators (`AspNetCore.Api.Roslyn`, `DependencyInjection.Roslyn`) use it internally. Application code does not need it.
 
-This project provides reusable extensions, models, and high-performance helper types used by Roslyn-based projects such as `Phymnary.SugarPot.AspNetCore.Api.Roslyn` and `Phymnary.SugarPot.DependencyInjection.Roslyn`.
+- Target: `netstandard2.0`, as Roslyn components require.
+- Dependencies: `Microsoft.CodeAnalysis.CSharp`, `Microsoft.CodeAnalysis.Analyzers`.
 
-## Features
+```bash
+dotnet add package Phymnary.SugarPot.RoslynComponents
+```
 
-- Symbol and attribute inspection helpers
-- Incremental provider utilities (including grouping helpers)
-- Shared source diagnostic model and reporting extensions
-- Type hierarchy modeling for generated partial type output
-- Performance-oriented helper types:
-  - `ImmutableArrayBuilder<T>`
-  - `EquatableArray<T>`
-  - pooled/object-pool and hash helpers
+## What's inside
 
-## Core namespaces
+| Namespace | Types | Use |
+|---|---|---|
+| `…RoslynComponents.Extensions` | `SymbolExtensions`, `AttributeDataExtensions`, `ProviderExtensions`, `CompilationExtensions`, ... | Symbol lookups by metadata name, attribute argument access, `GroupBy` for incremental pipelines |
+| `…RoslynComponents.Models` | `HierarchyInfo`, `TypeInfo`, `SourceDiagnosticInfo`, `Result<T>` | Equatable, cache-friendly pipeline models |
+| `…RoslynComponents.Helpers` | `EquatableArray<T>`, `ImmutableArrayBuilder<T>`, `ObjectPool<T>` | Low-allocation collections with value equality |
 
-- `Phymnary.SugarPot.RoslynComponents.Extensions`
-- `Phymnary.SugarPot.RoslynComponents.Models`
-- `Phymnary.SugarPot.RoslynComponents.Helpers`
+## Common tasks
 
-## Notable APIs
-
-### Symbol extensions
-
-`SymbolExtensions` includes helpers such as:
-
-- `GetFullyQualifiedName(...)`
-- `GetFullyQualifiedMetadataName(...)`
-- `HasAttributeWithFullyQualifiedMetadataName(...)`
-- `ImplementsFromFullyQualifiedMetadataName(...)`
-- `InheritsFromFullyQualifiedMetadataName(...)`
-
-These are useful for robust semantic checks in analyzers/generators.
-
-### Attribute helpers
-
-`AttributeDataExtensions.GetNamedArgument(...)` simplifies extraction of named attribute arguments.
-
-### Incremental provider helpers
-
-`ProviderExtensions.GroupBy(...)` helps shape incremental pipelines by grouping paired inputs into equatable arrays.
-
-### Hierarchy model and syntax generation
-
-`HierarchyInfo` captures type metadata (name, namespace, nesting) and can emit a generated `CompilationUnitSyntax` with proper partial nesting and generated-file trivia.
-
-### Diagnostics model
-
-`SourceDiagnosticInfo` wraps descriptor + location + args and provides `ToDiagnostic()` to report diagnostics consistently.
-
-### Performance helpers
-
-`ImmutableArrayBuilder<T>` and `EquatableArray<T>` are designed to reduce allocations and improve equality behavior in incremental pipelines.
-
-## Example usage
+**Check a symbol for an attribute or base type:**
 
 ```csharp
-using Microsoft.CodeAnalysis;
 using Phymnary.SugarPot.RoslynComponents.Extensions;
 
-static bool IsEndpoint(INamedTypeSymbol symbol)
-{
-    return symbol.HasAttributeWithFullyQualifiedMetadataName(
-        "Phymnary.SugarPot.AspNetCore.Api.EndpointAttribute");
-}
+bool isEndpoint = symbol.HasAttributeWithFullyQualifiedMetadataName("MyLib.EndpointAttribute");
+bool isHandler  = type.ImplementsFromFullyQualifiedMetadataName("MyLib.IHandler");
+string name     = type.GetFullyQualifiedName();   // "global::Ns.Type"
 ```
+
+**Read attribute arguments:**
+
+```csharp
+bool isSelf = attribute.GetNamedArgument("IsSelf", false);
+```
+
+**Generate a partial type in the right namespace and nesting:**
 
 ```csharp
 using Phymnary.SugarPot.RoslynComponents.Models;
 
-var diagnostic = SourceDiagnosticInfo.Create(descriptor, symbol, symbol.Name).ToDiagnostic();
-context.ReportDiagnostic(diagnostic);
+var hierarchy = HierarchyInfo.From(typeSymbol);   // equatable, safe to cache in a pipeline
+CompilationUnitSyntax unit = hierarchy.GetCompilationUnit(members, baseList);
+context.AddSource($"{hierarchy.FilenameHint}.g.cs", unit);
 ```
 
-## Dependencies
+**Report diagnostics from cached pipeline data:**
 
-- `Microsoft.CodeAnalysis.Analyzers`
-- `Microsoft.CodeAnalysis.CSharp`
+```csharp
+var info = SourceDiagnosticInfo.Create(descriptor, symbol, symbol.Name);
+context.ReportDiagnostic(info.ToDiagnostic());
+```
 
-## Target framework
+## Guidelines
 
-- .NET Standard 2.0
-
-## Notes
-
-- This is an internal shared library for Roslyn tooling projects.
-- Keep abstractions generic and dependency-light so they can be reused across analyzers/generators.
+- Keep pipeline models equatable. Use `EquatableArray<T>` instead of `ImmutableArray<T>` so incremental caching works.
+- Don't store `ISymbol` or `SyntaxNode` in models. Extract strings or `HierarchyInfo` instead.

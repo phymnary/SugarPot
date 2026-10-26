@@ -1,89 +1,81 @@
 # Phymnary.SugarPot.Module
 
-Lightweight module helpers for .NET applications.
+Organize startup code into modules and bind configuration sections to typed, validated options.
 
-This project provides a small module pattern to organize service registration and configuration binding in a consistent way.
+```bash
+dotnet add package Phymnary.SugarPot.Module
+```
 
-## Features
+It depends on [`Phymnary.SugarPot.DependencyInjection`](../Phymnary.SugarPot.DependencyInjection/README.md).
 
-- `IModule` contract for module-based service registration
-- `AddModule<TModule>()` extension for `IHostApplicationBuilder`
-- Optional integration with `IAutoRegister` from `Phymnary.SugarPot.DependencyInjection`
-- `IAppSettingsSection` pattern for strongly-typed configuration sections
-- `ConfigureSection<TConfig>()` helpers for binding and validating options
-- Utility extension methods for strings, enums, collections, reflection attributes, and enumerables
+## Modules
 
-## Installation
-
-Install `Phymnary.SugarPot.Module` from NuGet Package Manager.
-
-## Quick Start
-
-### 1) Create a module
+A module groups related service registrations:
 
 ```csharp
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
+using Phymnary.SugarPot.DependencyInjection;
 using Phymnary.SugarPot.Module;
+using Phymnary.SugarPot.Module.Extensions;
 
-public sealed class UserModule : IModule
+[Auto] // optional: also registers every [Service] class in this project
+public partial class BillingModule : IModule
 {
     public void ConfigureServices(IServiceCollection services, IConfigurationManager configuration)
     {
-        services.AddOptions();
+        services.ConfigureSection<StripeOptions, StripeOptionsValidator>();
     }
 }
 ```
 
-### 2) Register the module
-
 ```csharp
-using Phymnary.SugarPot.Module.Extensions;
-
-var builder = Host.CreateApplicationBuilder(args);
-builder.AddModule<UserModule>();
+var builder = WebApplication.CreateBuilder(args);   // any IHostApplicationBuilder
+builder.AddModule<BillingModule>();
 ```
 
-## Configuration Section Binding
+`AddModule<T>()` creates the module with `new()` and calls `ConfigureServices`. If the module implements `IAutoRegister`, as `[Auto]` modules do, it also calls `AddDependencies`.
 
-### Define config model
+## Typed configuration sections
+
+Implement `IAppSettingsSection` and give it the section name:
 
 ```csharp
-using Phymnary.SugarPot.Module;
-
-public sealed class JwtOptions : IAppSettingsSection
+public class StripeOptions : IAppSettingsSection
 {
-    public static string Section => "Jwt";
-
-    public string Issuer { get; set; } = string.Empty;
-    public string Audience { get; set; } = string.Empty;
+    public static string Section => "Stripe";
+    public string ApiKey { get; set; } = "";
 }
 ```
 
-### Bind section
-
-```csharp
-using Phymnary.SugarPot.Module.Extensions;
-
-services.ConfigureSection<JwtOptions>();
+```json
+{ "Stripe": { "ApiKey": "sk_test_..." } }
 ```
 
-### Bind section with validator
+Bind it, optionally with an `IValidateOptions<T>` validator:
 
 ```csharp
-services.ConfigureSection<JwtOptions, JwtOptionsValidator>();
+services.ConfigureSection<StripeOptions>();
+services.ConfigureSection<StripeOptions, StripeOptionsValidator>();
+
+// Read the bound values immediately, during startup:
+services.ConfigureSection<StripeOptions>(opts => Console.WriteLine(opts.ApiKey));
 ```
 
-## Extension Method Highlights
+Then inject `IOptions<StripeOptions>` as usual.
 
-- `PascalToKebabCase()`
-- `SplitBySemicolon()`
-- `IsBlank()`, `TryGetValuable()`, `IsTruthy()`
-- `TryGetExplicit()` for enums
-- `AddIfNotExisted()`
-- `AppendIfNotNull()`, `WhereNotNull()`, `JoinAsString()`
-- `HasAttribute<TAttribute>()`
+> `ConfigureSection` reads `IConfiguration` from the service collection. `HostApplicationBuilder` and `WebApplicationBuilder` register it automatically. In a bare `ServiceCollection`, register an `IConfiguration` instance first.
 
-## Target Frameworks
+## Extension helpers
 
-- .NET Standard 2.1
+| Extension | Namespace | Description |
+|---|---|---|
+| `PascalToKebabCase()` | `Phymnary.SugarPot.AspNetCore.Extensions` | `OrderItems` to `order-items` |
+| `IsBlank()`, `NullIfBlank()`, `TryGetValuable(out)` | same | Null or whitespace checks |
+| `IsTruthy()` | same | `"true"`, `"1"`, `"t"` (any case) |
+| `SplitBySemicolon()` | same | Split, trim, and drop empty entries |
+| `StripPrefix()`, `StripPostfix()` | same | Remove a leading or trailing string or char |
+| `Guid?.NullIfEmpty()`, `Guid?.TryGetValuable(out)` | `Phymnary.SugarPot.Module.Extensions` | Treat `Guid.Empty` as missing |
+| `TryGetExplicit(out int)` | same | Enum to int, returns whether the value is defined |
+| `AddIfNotExisted()` | same | Add to a collection only if the item is not already there |
+| `AppendIfNotNull()`, `WhereNotNull()`, `JoinAsString()`, `IndexOf()` | same | Sequence helpers |
+| `HasAttribute<T>()` | same | Reflection attribute check |
+| `GetConfiguration()` | same | Get `IConfiguration` from an `IServiceCollection` |

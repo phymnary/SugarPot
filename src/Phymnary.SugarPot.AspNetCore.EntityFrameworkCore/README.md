@@ -1,218 +1,207 @@
 # Phymnary.SugarPot.AspNetCore.EntityFrameworkCore
 
-Entity Framework Core infrastructure for SugarPot applications.
-
-This package provides:
-
-- Generic EF repositories
-- SaveChanges interceptors for auditing, soft delete, and tenant assignment
-- ModelBuilder helpers for table naming and global query filters
-- Transaction and resilient execution helpers
-
-## What Is Included
-
-### Repositories
-
-- `EfRepository<TDbContext, TEntity>`
-- `EfRepository<TDbContext, TEntity, TKey>`
-- Query/update customization via `IRepositoryOptions<TEntity>`:
-  - `EntityQueryOptions<TEntity>`
-  - `EntityUpdateOptions<TEntity>`
-
-### Interceptors
-
-- `OnAttachedInterceptor` (always registered by `AddEfCoreServices`)
-- `SoftDeleteInterceptor` (opt-in)
-- `SetTenantOnSavingInterceptor` (opt-in)
-- `AuditOnSavingInterceptor` (enabled through property-change audit registration)
-
-### Helpers
-
-- `ModelBuilderHelper` and `BuildEntity(...)`
-- `IDbFunctionProvider` implementation (`DbFunctionProvider<TDbContext>`)
-- `IQueryTransaction` wrapper (`WrappedDbContextTransaction`)
-
-## Target Frameworks And EF Core Versioning
-
-This project targets:
-
-- net8.0
-- net9.0
-- net10.0
-
-EF Core package version behavior in this project:
-
-- For net10.0-compatible targets: `Microsoft.EntityFrameworkCore` and `Microsoft.EntityFrameworkCore.Relational` use `[10.0.0,)`
-- Otherwise: the same packages use `[8.0.0,)`
-
-## Installation
+EF Core implementation of the SugarPot [Domain](../Phymnary.SugarPot.AspNetCore.Domain/README.md) contracts. It includes a repository base class, save-time behaviors (child-entity attach, soft delete, tenant assignment, auditing), query-filter setup, and transaction helpers.
 
 ```bash
 dotnet add package Phymnary.SugarPot.AspNetCore.EntityFrameworkCore
 ```
 
-## Quick Start
+EF Core dependency: `[8.0.0,)` on net8.0/net9.0 and `[10.0.0,)` on net10.0. Add your own database provider package.
 
-### 1. Register SugarPot EF services
+## Setup
+
+### 1. Register services
 
 ```csharp
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Phymnary.SugarPot.AspNetCore.Extensions;
 
-services.AddEfCoreServices<AppDbContext>(cfg =>
-{
-    cfg.AddSoftDelete();
-    cfg.AddMultiTenancy();
+services.AddDbContext<AppDbContext>(o => o.UseSqlServer(connectionString));
 
-    // Enables AuditOnSavingInterceptor and property-change tracking
-    cfg.AddPropertyChangeAudit<AppDbContext, PropertyChangeAudit>(audit => new PropertyChangeAudit
-    {
-        EntityName = audit.EntityName,
-        PropertyName = audit.PropertyName,
-        TypeName = audit.TypeName,
-        EntityId = audit.EntityId,
-        OldValue = audit.OldValue,
-        NewValue = audit.NewValue,
-        ModifiedById = audit.ModifiedById,
-        ModifiedAt = audit.ModifiedAt,
-        IsDeleted = audit.IsDeleted,
-    });
-});
-
-services.AddDbContext<AppDbContext>((sp, options) =>
-{
-    options.UseSqlServer(connectionString);
-
-    // Add all registered EF interceptors
-    options.AddInterceptors(sp.GetServices<IInterceptor>());
-});
+services.AddEfCoreServices<AppDbContext>(ef => ef
+    .AddSoftDelete()      // optional
+    .AddMultiTenancy()    // optional
+    .AddAuditing(audit => audit.AddPropertyChangeAudit(MapAudit))); // optional, see "Auditing"
 ```
 
-### 2. Inherit the repository base
+You don't add EF interceptors to the `DbContext`. These behaviors run inside `EfRepository` just before it calls `SaveChangesAsync`.
+
+> **Save through the repository.** If you call `dbContext.SaveChangesAsync()` directly, none of these behaviors run.
+
+`AddEfCoreServices` also registers `IDbFunctionProvider`, `EfDbStateManager`, and `EfRepositoryAddons`.
+
+**Your app must provide** `ICurrentUser`, `IRunAt`, and `IAbortedToken`, plus `ICurrentTenant` when multi-tenancy is on. `AddApiServices()` and `AddApplicationServices()` from the Api and Application packages register all of them.
+
+### 2. Configure the model
+
+`ModelBuilderHelper` adds global query filters for `ISoftDelete` and `IMultiTenant` entities and stops EF from mapping `DomainStatus`:
 
 ```csharp
-using Phymnary.SugarPot.AspNetCore.Entities;
-using Phymnary.SugarPot.AspNetCore.Repositories;
+using Phymnary.SugarPot.AspNetCore;
 
-public sealed class UserRepository(
-    AppDbContext dbContext,
-    IRepositoryOptions<User> options,
-    EfRepositoryAddons addons
-) : EfRepository<AppDbContext, User, Guid>(dbContext, options, addons)
+public class AppDbContext(DbContextOptions<AppDbContext> options, ICurrentTenant tenant) : DbContext(options)
 {
-}
-```
+    private Guid TenantId => tenant.Id ?? Guid.Empty;
 
-Common methods:
-
-- `InsertAsync`
-- `UpsertAsync`
-- `UpdateAsync`
-- `FindAsync`
-- `QueryAsync`
-- `AnyAsync`
-- `CountAsync`
-- `AdvanceQuery(...)`
-- `Delete(...)`
-- `GetAsync(id)` for keyed repositories
-
-## Repository Options
-
-You can centralize entity behavior with `IRepositoryOptions<TEntity>`.
-
-```csharp
-using Phymnary.SugarPot.AspNetCore.Repositories;
-
-public sealed class UserRepositoryOptions : EfRepositoryOptions<User>
-{
-    public UserRepositoryOptions()
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        QueryOptions = new EntityQueryOptions<User>
-        {
-            DefaultIncludeQuery = q => q,
-            IncludeDetailsQuery = q => q
-                .IncludeIn(u => u.Profile)
-        };
-
-        UpdateOptions = new EntityUpdateOptions<User>
-        {
-            Update = (input, existing) =>
-            {
-                existing.Name = input.Name;
-                existing.Email = input.Email;
-            },
-        };
-
-        // Optional domain validator
-        Validator = null;
+        new ModelBuilderHelper(modelBuilder) { TenantIdAccessor = () => TenantId }
+            .BuildEntity<Book>(b => b.Property(x => x.Title).HasMaxLength(200), schema: "app")
+            .BuildEntity<Order>();
     }
 }
 ```
 
-Notes:
+| Entity implements | Filter added |
+|---|---|
+| `ISoftDelete` | `DeletedAt == null` |
+| `IMultiTenant` | `TenantId == TenantIdAccessor()` |
 
-- `UpsertAsync` requires `UpdateOptions.Update`; otherwise it throws.
-- `Delete(...)` first executes `UpdateOptions.OnDelete` when provided.
-- If `OnDelete` returns `true`, default delete logic is skipped.
+- On **net10.0** the filters are named (`ModelBuilderHelper.SoftDelelteQueryFilterName`, `MultiTenancyQueryFilterName`), so you can turn them off one at a time with `IgnoreQueryFilters([...])`. On net10.0, a multi-tenant entity without a `TenantIdAccessor` throws.
+- On **net8.0/net9.0** both conditions are combined into one filter. The tenant condition is skipped if there is no `TenantIdAccessor`.
+- `BuildEntity` adds filters and runs your `additionalConfigure` callback. It does not set table names. The `schema` argument is accepted but not applied, so set it with `b.ToTable(...)` inside the callback.
 
-## Advanced Query API
+### 3. Create repositories
 
-`AdvanceQuery(...)` supports ordering, paging, projection, and pagination metadata.
+Each repository needs an `IRepositoryOptions<TEntity>` registration, even an empty one:
 
 ```csharp
-var page = await repository
-    .AdvanceQuery(q => q.Where(x => x.IsActive))
-    .OrderByDescending(x => x.CreatedAt)
-    .Pick(perPage: 20, pageIndex: 1)
-    .PaginateAsync(ct);
+using Phymnary.SugarPot.AspNetCore.Repositories;
+
+public class BookRepositoryOptions : EfRepositoryOptions<Book>;
+
+public class BookRepository(AppDbContext db, IRepositoryOptions<Book> options, EfRepositoryAddons addons)
+    : EfRepository<AppDbContext, Book, Guid>(db, options, addons);
+
+services
+    .AddScoped<IRepositoryOptions<Book>, BookRepositoryOptions>()
+    .AddScoped<BookRepository>();
 ```
 
-`PaginateAsync` returns:
+Use `EfRepository<TDbContext, TEntity>` for entities without an `Entity<TKey>` key; it doesn't have `GetAsync`. Subclasses can use the protected `DbSet`, `Queryable(canIncludeDetails)`, `ValidateAndThrowAsync`, and `GetRequestAborted` members.
 
-- `Count`: total item count for the base filtered query
-- `Items`: paged `IAsyncEnumerable<T>`
+## Repository options
 
-## ModelBuilder Helper
-
-Use `ModelBuilderHelper` to keep entity mapping consistent.
+Options control includes, upsert merging, delete behavior, and validation for each entity type:
 
 ```csharp
-protected override void OnModelCreating(ModelBuilder modelBuilder)
-{
-    var helper = new ModelBuilderHelper(modelBuilder)
-    {
-        TenantIdAccessor = () => _currentTenant.Id!.Value,
-    };
+using Phymnary.SugarPot.AspNetCore.Extensions; // IncludeIn
 
-    helper
-        .BuildEntity<User>(schema: "app")
-        .BuildEntity<Order>(schema: "app");
+public class OrderRepositoryOptions : EfRepositoryOptions<Order>
+{
+    public OrderRepositoryOptions()
+    {
+        Validator = new OrderValidator();
+
+        QueryOptions = new EntityQueryOptions<Order>
+        {
+            DefaultIncludeQuery = q => q.Include(o => o.Customer),   // used by every read
+            IncludeDetailsQuery = q => q.IncludeIn(o => o.Lines),    // added when canIncludeDetails: true
+        };
+
+        UpdateOptions = new EntityUpdateOptions<Order>
+        {
+            Update = (incoming, existing) => existing.Note = incoming.Note, // required for UpsertAsync
+            OnDelete = order => false,                                      // return true to skip the default delete
+        };
+    }
 }
 ```
 
-Behavior:
+The default includes are applied by `FindAsync`, `QueryAsync`, `GetAsync`, and `UpsertAsync`, and by `AdvanceQuery` when you pass `canIncludeDetails`. `AnyAsync` and `CountAsync` query the `DbSet` directly.
 
-- Table name defaults to CLR type name
-- Applies soft-delete filter for entities implementing `ISoftDelete`
-- Applies tenant filter for entities implementing `IMultiTenant`
-  - On net10.0+, tenant accessor is required for multi-tenant entities
+## What happens on save
 
-## Runtime Dependencies
+`InsertAsync`, `UpsertAsync`, and `UpdateAsync` run these steps in order:
 
-When enabling features, make sure these services are available in DI from your application/domain layer:
+1. **Validate**: `IRepositoryOptions.Validator`, if one is set.
+2. **Attach** (always on): children added with `collection.Attach(child)` are marked `Added`.
+3. **Soft delete** (`AddSoftDelete`): entities flagged by `Delete()` get `DeletedAt` from `IRunAt` and `DeletedById` from `ICurrentUser`.
+4. **Tenant** (`AddMultiTenancy`): new `IMultiTenant` entities get `TenantId` from `ICurrentTenant`. If there is no tenant, it throws `TenantMissingInContextException`.
+5. **Audit** (`AddAuditing`): see [Auditing](#auditing).
+6. **Save**: `DbUpdateException` is rethrown as `EntityPersistenceException` (409).
 
-- `ICurrentUser`
-- `IRunAt`
-- `IAbortedToken`
-- `ICurrentTenant` (required when multi-tenancy is enabled)
+> Without `AddSoftDelete()`, calling `Delete()` on an `ISoftDelete` entity only flags it, and nothing is written.
 
-## Notes
+## Auditing
 
-- `OnAttachedInterceptor` is always added by `AddEfCoreServices`.
-- `AuditOnSavingInterceptor` is registered when `AddPropertyChangeAudit(...)` is configured.
-- `ConfigureAuditing(...)` currently stores internal metadata used by this package.
+With `AddAuditing`, every `IAuditable` entity gets:
 
-## License
+- **On insert:** `CreatedAt` and `CreatedById`.
+- **On update** (including changes inside `[Owned]` types): `UpdatedAt` and `UpdatedById`, plus one audit row per changed property, if you registered a property-change audit.
 
-See the repository root for license details.
+### Store property changes
+
+Define an audit entity, add it to your `DbContext`, and pass a mapper:
+
+```csharp
+using Phymnary.SugarPot.AspNetCore.Auditings;
+
+public class PropertyChangeLog : Entity<Guid>, IPropertyChangeAudit
+{
+    public PropertyChangeLog(Guid id) : base(id) { }
+    public required string EntityName { get; set; }
+    public required string EntityId { get; set; }
+    public required string PropertyName { get; set; }
+    public required string TypeName { get; set; }
+    public required string OldValue { get; set; }   // JSON
+    public required string NewValue { get; set; }   // JSON
+    public Guid? ModifiedById { get; set; }
+    public DateTimeOffset ModifiedAt { get; set; }
+}
+
+services.AddEfCoreServices<AppDbContext>(ef => ef.AddAuditing(audit => audit
+    .ConfigureStructure(s => s.TrackBy = TrackBy.Domain)   // or TrackBy.Database
+    .AddPropertyChangeAudit(h => new PropertyChangeLog(Guid.NewGuid())
+    {
+        EntityName = h.EntityName, EntityId = h.EntityId, PropertyName = h.PropertyName,
+        TypeName = h.TypeName, OldValue = h.OldValue, NewValue = h.NewValue,
+        ModifiedById = h.ModifiedById, ModifiedAt = h.ModifiedAt,
+    })));
+```
+
+Always pass the mapper. The change tracker needs it to build audit rows.
+
+### Choose which properties are logged
+
+| Rule | Result |
+|---|---|
+| `[AuditOnly("Title", "Price")]` on the entity | Only these properties are logged |
+| `[DisabledAuditing]` or `[NotMapped]` on a property | Never logged |
+| Reference to another class | Logged as `{Name}{IdPostfix}`, for example `CustomerId` (`IdPostfix` defaults to `"Id"`) |
+| Property of an `[Owned]` type | Logged as `Owner.Property`, for example `Address.City` |
+
+`ConfigureStructure` options:
+
+- `TrackBy.Domain` (the default) logs CLR type and property names.
+- `TrackBy.Database` logs table and column names.
+- `IdPostfix` changes the suffix used for reference properties.
+
+### Separate audit database
+
+To write audit rows to a different `DbContext`, use the generic overload:
+
+```csharp
+ef.AddAuditing<AuditDbContext>(audit => audit.AddPropertyChangeAudit(MapAudit));
+```
+
+Only one `AddAuditing` call is allowed per `AddEfCoreServices`.
+
+## Transactions and resilience
+
+Inject `IDbFunctionProvider`:
+
+```csharp
+await using var tx = await db.BeginTransactionAsync();
+// ... repository calls ...
+await tx.CommitAsync();
+
+// Retry with the provider's execution strategy
+await db.UseResilientStrategyAsync(async ct => { /* ... */ });
+
+// Retry inside a transaction; verifySucceeded is called if the commit outcome is unknown
+await db.UseResilientStrategyWithTransactionAsync(
+    async ct => { /* ... */ },
+    async ct => await repo.AnyAsync(x => x.Id == id, ct));
+```
+
+`IQueryTransaction` mirrors EF's `IDbContextTransaction` and supports savepoints. Every cancellation token falls back to the request-aborted token.
