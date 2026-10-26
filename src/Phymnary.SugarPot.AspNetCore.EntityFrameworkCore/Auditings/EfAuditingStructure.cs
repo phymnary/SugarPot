@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Phymnary.SugarPot.Module.Extensions;
+using System.Collections.Concurrent;
 
 namespace Phymnary.SugarPot.AspNetCore.Auditings;
 
@@ -12,7 +13,7 @@ file record PropertyWithOwner(PropertyInfo PropertyInfo, string OwnedBy);
 /// </summary>
 public class EfAuditingStructure
 {
-    private readonly Dictionary<
+    private readonly ConcurrentDictionary<
         Type,
         EntityPropertyAuditingMetadata
     > _propertyAuditingMetadataCaches = [];
@@ -63,16 +64,12 @@ public class EfAuditingStructure
 
     internal EntityPropertyAuditingMetadata GetPropertyAuditingMetadata(Type entityType)
     {
-        if (_propertyAuditingMetadataCaches.TryGetValue(entityType, out var value))
-            return value;
-
-        value = new EntityPropertyAuditingMetadata(
-            entityType.GetCustomAttribute<AuditOnlyAttribute>()?.PropertyNames
-                ?? GetAuditingPropertyNames(entityType.GetProperties())
-        );
-
-        _propertyAuditingMetadataCaches[entityType] = value;
-
-        return value;
+        return _propertyAuditingMetadataCaches.GetOrAdd(
+        entityType,
+        type => new EntityPropertyAuditingMetadata(
+            type.GetCustomAttribute<AuditOnlyAttribute>()?.PropertyNames
+                ?? GetAuditingPropertyNames(type.GetProperties()).ToArray()
+        )
+    );
     }
 }
