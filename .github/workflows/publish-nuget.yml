@@ -16,6 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      id-token: write # required for NuGet trusted publishing
 
     steps:
       - uses: actions/checkout@v4
@@ -65,11 +66,19 @@ jobs:
           --configuration Release
           -p:PackageOutputPath=${{ github.workspace }}/artifacts
 
+      # Exchanges the GitHub OIDC token for a short-lived nuget.org API key
+      - name: NuGet login
+        id: nuget-login
+        if: steps.versions.outputs.AspPackedVersion == 'true' || steps.versions.outputs.DIPackedVersion == 'true'
+        uses: NuGet/login@v1
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
       - name: Push AspNetCore packages
         if: steps.versions.outputs.AspPackedVersion == 'true'
         run: >
           dotnet nuget push "artifacts/Phymnary.SugarPot.AspNetCore.*.nupkg"
-          --api-key ${{ secrets.NUGET_API_KEY }}
+          --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
           --source https://api.nuget.org/v3/index.json
           --skip-duplicate
 
@@ -77,6 +86,6 @@ jobs:
         if: steps.versions.outputs.DIPackedVersion == 'true'
         run: >
           dotnet nuget push "artifacts/Phymnary.SugarPot.DependencyInjection.*.nupkg"
-          --api-key ${{ secrets.NUGET_API_KEY }}
+          --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
           --source https://api.nuget.org/v3/index.json
           --skip-duplicate
