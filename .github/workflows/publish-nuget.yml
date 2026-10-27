@@ -1,0 +1,82 @@
+name: Publish NuGet packages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Directory.Build.props"
+  workflow_dispatch:
+
+concurrency:
+  group: publish-nuget
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Compare each version property in Directory.Build.props against the previous
+      # push; manual runs publish every group (already published versions are skipped)
+      - name: Detect version changes
+        id: versions
+        run: |
+          read_version() {
+            git show "$1:Directory.Build.props" 2>/dev/null | sed -n "s:.*<$2>\(.*\)</$2>.*:\1:p"
+          }
+
+          before="${{ github.event.before }}"
+          for prop in AspPackedVersion DIPackedVersion; do
+            new=$(read_version HEAD "$prop")
+            old=""
+            if [ "${{ github.event_name }}" = "push" ] && git cat-file -e "$before" 2>/dev/null; then
+              old=$(read_version "$before" "$prop")
+            fi
+
+            if [ "$new" != "$old" ]; then
+              echo "$prop: '$old' -> '$new'"
+              echo "$prop=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "$prop: unchanged ($new)"
+              echo "$prop=false" >> "$GITHUB_OUTPUT"
+            fi
+          done
+
+      - uses: actions/setup-dotnet@v4
+        if: steps.versions.outputs.AspPackedVersion == 'true' || steps.versions.outputs.DIPackedVersion == 'true'
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+
+      # GeneratePackageOnBuild is enabled for Release in src/Directory.Build.props,
+      # so building also packs every project under src/ into ./artifacts
+      - name: Build and pack
+        if: steps.versions.outputs.AspPackedVersion == 'true' || steps.versions.outputs.DIPackedVersion == 'true'
+        run: >
+          dotnet build Phymnary.SugarPot.slnx
+          --configuration Release
+          -p:PackageOutputPath=${{ github.workspace }}/artifacts
+
+      - name: Push AspNetCore packages
+        if: steps.versions.outputs.AspPackedVersion == 'true'
+        run: >
+          dotnet nuget push "artifacts/Phymnary.SugarPot.AspNetCore.*.nupkg"
+          --api-key ${{ secrets.NUGET_API_KEY }}
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate
+
+      - name: Push DependencyInjection package
+        if: steps.versions.outputs.DIPackedVersion == 'true'
+        run: >
+          dotnet nuget push "artifacts/Phymnary.SugarPot.DependencyInjection.*.nupkg"
+          --api-key ${{ secrets.NUGET_API_KEY }}
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate
